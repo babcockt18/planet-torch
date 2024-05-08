@@ -72,12 +72,12 @@ def train(memory, rssm, optimizer, device, N=32, H=50, beta=1.0, grads=False):
 
 
 def main():
-    env = TorchImageEnvWrapper('Pendulum-v0', bit_depth=5)
+    env = TorchImageEnvWrapper('Pendulum-v1', bit_depth=5)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     rssm_model = RecurrentStateSpaceModel(env.action_size).to(device)
     optimizer = torch.optim.Adam(rssm_model.parameters(), lr=1e-3, eps=1e-4)
     policy = RSSMPolicy(
-        rssm_model, 
+        rssm_model,
         planning_horizon=20,
         num_candidates=1000,
         num_iterations=10,
@@ -104,7 +104,7 @@ def main():
                     metrics[k] = []
                 metrics[k].append(v)
                 metrics[f'{k}_mean'] = np.array(v).mean()
-        
+
         summary.update(metrics)
         mem.append(rollout_gen.rollout_once(explore=True))
         eval_episode, eval_frames, eval_metrics = rollout_gen.rollout_eval()

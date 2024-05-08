@@ -40,14 +40,15 @@ def preprocess_img(image, depth):
     """
     image.div_(2 ** (8 - depth)).floor_().div_(2 ** depth).sub_(0.5)
     image.add_(torch.randn_like(image).div_(2 ** depth)).clamp_(-0.5, 0.5)
-    
+
 
 def bottle(func, *tensors):
     """
-    Evaluates a func that operates in N x D with inputs of shape N x T x D 
+    Evaluates a func that operates in N x D with inputs of shape N x T x D
     """
     n, t = tensors[0].shape[:2]
-    out = func(*[x.view(n*t, *x.shape[2:]) for x in tensors])
+    # print(f"n = {n}, t = {t}\n")
+    out = func(*[x.reshape(n*t, *x.shape[2:]) for x in tensors])
     return out.view(n, t, *out.shape[1:])
 
 
@@ -78,7 +79,7 @@ def save_video(frames, path, name):
 
 def save_frames(target, pred_prior, pred_posterior, name, n_rows=5):
     """
-    Saves the target images with the generated prior and posterior predictions. 
+    Saves the target images with the generated prior and posterior predictions.
     """
     image = torch.cat([target, pred_prior, pred_posterior], dim=3)
     save_image(make_grid(image + 0.5, nrow=n_rows), f'{name}.png')
@@ -90,7 +91,7 @@ def get_mask(tensor, lengths):
     Time should be the first axis.
     input:
         tensor: the tensor for which to generate the mask [N x T x ...]
-        lengths: lengths of the seq. [N] 
+        lengths: lengths of the seq. [N]
     """
     mask = torch.zeros_like(tensor)
     for i in range(len(lengths)):
@@ -141,7 +142,7 @@ class TensorBoardMetrics:
             self.summary[key] = self.writer.add_scalar
         else:
             raise ValueError(f'Datatype {type(val)} not allowed')
-    
+
     def update(self, metrics: dict):
         metrics = flatten_dict(metrics)
         for key_dots, val in metrics.items():
@@ -206,24 +207,26 @@ class TorchImageEnvWrapper:
     Also returns observations in image form.
     """
     def __init__(self, env, bit_depth, observation_shape=None, act_rep=2):
-        self.env = gym.make(env)
+        self.env = gym.make(env, render_mode='rgb_array')
         self.bit_depth = bit_depth
         self.action_repeats = act_rep
 
     def reset(self):
         self.env.reset()
-        x = to_tensor_obs(self.env.render(mode='rgb_array'))
+        x = self.env.render()
+        x = to_tensor_obs(x)
         preprocess_img(x, self.bit_depth)
         return x
 
     def step(self, u):
         u, rwds = u.cpu().detach().numpy(), 0
         for _ in range(self.action_repeats):
-            _, r, d, i = self.env.step(u)
-            rwds += r
-        x = to_tensor_obs(self.env.render(mode='rgb_array'))
+            obs, reward, terminated, truncated, info = self.env.step(u)
+            rwds += reward
+        x = self.env.render()
+        x = to_tensor_obs(x)
         preprocess_img(x, self.bit_depth)
-        return x, rwds, d, i
+        return x, rwds, terminated, info
 
     def render(self):
         self.env.render()
